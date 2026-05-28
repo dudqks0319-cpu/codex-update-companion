@@ -102,6 +102,8 @@ swift test
 
 ## 직접 배포 체크리스트
 
+초기 베타 릴리즈 노트 초안은 `docs/releases/v0.1.0-beta.1.md`에 있습니다.
+
 1. Apple Developer Program 계정 준비
 2. Developer ID Application 인증서로 서명
 3. Hardened Runtime 활성화
