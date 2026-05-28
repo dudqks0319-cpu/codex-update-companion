@@ -1,7 +1,11 @@
 import AppKit
 import Foundation
 
-struct CodexVersionService {
+protocol CodexVersionProviding {
+    func currentSnapshot() async -> CodexInstallationSnapshot
+}
+
+struct CodexVersionService: CodexVersionProviding {
     func currentSnapshot() async -> CodexInstallationSnapshot {
         async let cliInfo = cliVersionInfo()
         async let macUpdateInfo = latestMacAppUpdate()

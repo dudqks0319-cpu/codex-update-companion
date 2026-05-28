@@ -20,3 +20,8 @@ jobs:
         run: ./script/build_bundle.sh debug
       - name: Verify app bundle structure
         run: ./script/verify_bundle.sh "dist/Codex Update Companion.app"
+      - name: Upload app bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Codex-Update-Companion-app
+          path: dist/Codex Update Companion.app

@@ -1,7 +1,12 @@
 import Foundation
 import UserNotifications
 
-final class NotificationService: NSObject, UNUserNotificationCenterDelegate {
+protocol NotificationSending {
+    func requestAuthorization() async -> Bool
+    func notifyNewReleases(_ releases: [ReleaseItem], enabled: Bool) async
+}
+
+final class NotificationService: NSObject, NotificationSending, UNUserNotificationCenterDelegate {
     private let center: UNUserNotificationCenter
 
     init(center: UNUserNotificationCenter = .current()) {

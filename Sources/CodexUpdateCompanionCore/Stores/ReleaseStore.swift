@@ -56,12 +56,12 @@ public final class ReleaseStore: ObservableObject {
     }
 
     private let cacheStore: ReleaseCacheStore
-    private let githubService: GitHubReleaseService
-    private let changelogService: OpenAIChangelogService
+    private let githubService: any GitHubReleaseFetching
+    private let changelogService: any OpenAIChangelogFetching
     private let processMonitor: CodexProcessMonitor
-    private let notificationService: NotificationService
+    private let notificationService: any NotificationSending
     private let loginItemService: LoginItemService
-    private let versionService: CodexVersionService
+    private let versionService: any CodexVersionProviding
     private let defaults: UserDefaults
 
     public convenience init() {
@@ -79,12 +79,12 @@ public final class ReleaseStore: ObservableObject {
 
     init(
         cacheStore: ReleaseCacheStore = ReleaseCacheStore(),
-        githubService: GitHubReleaseService = GitHubReleaseService(),
-        changelogService: OpenAIChangelogService = OpenAIChangelogService(),
+        githubService: any GitHubReleaseFetching = GitHubReleaseService(),
+        changelogService: any OpenAIChangelogFetching = OpenAIChangelogService(),
         processMonitor: CodexProcessMonitor = CodexProcessMonitor(),
-        notificationService: NotificationService = NotificationService(),
+        notificationService: any NotificationSending = NotificationService(),
         loginItemService: LoginItemService = LoginItemService(),
-        versionService: CodexVersionService = CodexVersionService(),
+        versionService: any CodexVersionProviding = CodexVersionService(),
         defaults: UserDefaults = .standard
     ) {
         self.cacheStore = cacheStore
@@ -132,13 +132,21 @@ public final class ReleaseStore: ObservableObject {
         let knownIDs = Set(releases.map(\.id))
         let hadExistingCache = !releases.isEmpty
 
-        do {
-            async let githubFetch = githubService.fetchLatestReleases()
-            async let changelogFetch = changelogService.fetchLatestEntries()
+        let githubResult = await fetchResult {
+            try await githubService.fetchLatestReleases()
+        }
+        let changelogResult = await fetchResult {
+            try await changelogService.fetchLatestEntries()
+        }
 
-            let githubReleases = try await githubFetch
-            let changelogReleases = (try? await changelogFetch) ?? []
-            let fetched = githubReleases + changelogReleases
+        let fetched = githubResult.items + changelogResult.items
+        if fetched.isEmpty, let error = githubResult.error ?? changelogResult.error {
+            errorMessage = errorMessage(for: error)
+            isLoading = false
+            return
+        }
+
+        do {
             let merged = merge(fetched: fetched, existing: releases)
             let newReleases = merged.filter { !knownIDs.contains($0.id) }
 
@@ -154,6 +162,18 @@ public final class ReleaseStore: ObservableObject {
         }
 
         isLoading = false
+    }
+
+    private func fetchResult(_ work: () async throws -> [ReleaseItem]) async -> (items: [ReleaseItem], error: Error?) {
+        do {
+            return (try await work(), nil)
+        } catch {
+            return ([], error)
+        }
+    }
+
+    private func errorMessage(for error: Error) -> String {
+        (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
     }
 
     func refreshCurrentVersions() async {

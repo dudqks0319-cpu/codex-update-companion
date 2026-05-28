@@ -65,7 +65,7 @@ CI용 번들 구조 검증:
 - `script/build_and_run.sh`: 개발용. 디버그 번들을 만들고 실행/로그/검증을 수행합니다.
 - `script/build_bundle.sh`: 디버그 또는 릴리즈 앱 번들만 생성합니다.
 - `script/verify_bundle.sh`: 앱 번들 구조를 검증합니다. `--strict-signing`을 붙이면 서명/Gatekeeper 검증도 수행합니다.
-- `script/package_dmg.sh`: 앱 번들을 DMG로 패키징합니다.
+- `script/package_dmg.sh`: 앱 번들을 DMG로 패키징합니다. `hdiutil`을 사용하므로 샌드박스나 CI 환경에서는 실패할 수 있고, 실제 배포 전에는 로컬 macOS 서명 환경에서 한 번 검증해야 합니다.
 - `script/notarize.sh`: notarization 제출과 stapling을 수행합니다.
 
 ## CI

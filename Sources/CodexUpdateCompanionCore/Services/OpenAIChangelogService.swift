@@ -1,6 +1,10 @@
 import Foundation
 
-struct OpenAIChangelogService {
+protocol OpenAIChangelogFetching {
+    func fetchLatestEntries() async throws -> [ReleaseItem]
+}
+
+struct OpenAIChangelogService: OpenAIChangelogFetching {
     private let session: URLSession
     private let changelogURL: URL
 
@@ -90,7 +94,6 @@ public enum OpenAIChangelogParser {
             let summary = String(chunk.prefix(700))
             let surface = surface(for: "\(title) \(summary)")
             let slug = stableSlug(title: title, dateText: dateText)
-            let url = URL(string: "#\(slug)", relativeTo: baseURL)?.absoluteURL ?? baseURL
 
             return ChangelogEntry(
                 id: "\(dateText)-\(slug)",
@@ -98,7 +101,7 @@ public enum OpenAIChangelogParser {
                 date: date,
                 surface: surface,
                 summary: summary,
-                url: url
+                url: baseURL
             )
         }
     }

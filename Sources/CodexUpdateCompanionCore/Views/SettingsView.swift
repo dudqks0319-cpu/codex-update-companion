@@ -69,6 +69,10 @@ struct SettingsView: View {
                 )
             )
 
+            Text("이 옵션을 켜면 Codex가 꺼져 있을 때 메뉴바 아이콘도 숨겨집니다. 다시 설정하려면 Codex를 먼저 실행하세요.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             if let message = store.settingsErrorMessage {
                 Text(message)
                     .font(.caption)

@@ -22,5 +22,6 @@ final class OpenAIChangelogParserTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(entries.count, 2)
         XCTAssertTrue(entries.contains { $0.surface == .plugin || $0.surface == .macApp })
         XCTAssertTrue(entries.contains { $0.surface == .cli })
+        XCTAssertTrue(entries.allSatisfy { $0.url == URL(string: "https://developers.openai.com/codex/changelog")! })
     }
 }

@@ -17,7 +17,11 @@ enum ReleaseFetchError: LocalizedError {
     }
 }
 
-struct GitHubReleaseService {
+protocol GitHubReleaseFetching {
+    func fetchLatestReleases() async throws -> [ReleaseItem]
+}
+
+struct GitHubReleaseService: GitHubReleaseFetching {
     private let releasesURL: URL
     private let session: URLSession
 
