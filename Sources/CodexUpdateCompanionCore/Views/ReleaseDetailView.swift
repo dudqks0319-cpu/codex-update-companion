@@ -89,8 +89,8 @@ struct ReleaseDetailView: View {
     private var allChangesSection: some View {
         DetailSection(title: "세부 변경 전체") {
             VStack(alignment: .leading, spacing: 16) {
-                ForEach(Array(digest.changes.enumerated()), id: \.element.id) { index, change in
-                    FriendlyChangeRow(index: index + 1, change: change, showsEvidence: true, showsUsage: true)
+                ForEach(digest.sections) { section in
+                    FriendlyChangeSectionView(section: section)
                 }
             }
         }
@@ -252,6 +252,42 @@ private struct FriendlyChangeRow: View {
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
+        }
+    }
+}
+
+private struct FriendlyChangeSectionView: View {
+    let section: FriendlyChangeSection
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(section.title)
+                    .font(.subheadline.weight(.semibold))
+
+                Text("\(section.changes.count)개")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(.quaternary, in: RoundedRectangle(cornerRadius: 6))
+
+                Spacer()
+            }
+
+            if section.title != section.rawTitle {
+                Text(section.rawTitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                ForEach(Array(section.changes.enumerated()), id: \.element.id) { index, change in
+                    FriendlyChangeRow(index: index + 1, change: change, showsEvidence: true, showsUsage: true)
+                }
+            }
+            .padding(12)
+            .background(.quaternary.opacity(0.28), in: RoundedRectangle(cornerRadius: 8))
         }
     }
 }

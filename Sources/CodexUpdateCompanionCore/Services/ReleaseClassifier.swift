@@ -124,8 +124,19 @@ public struct FriendlyChange: Identifiable, Equatable {
     public var evidence: String
 }
 
-public struct FriendlyReleaseDigest: Equatable {
+public struct FriendlyChangeSection: Identifiable, Equatable {
+    public var id: String
+    public var title: String
+    public var rawTitle: String
     public var changes: [FriendlyChange]
+}
+
+public struct FriendlyReleaseDigest: Equatable {
+    public var sections: [FriendlyChangeSection]
+
+    public var changes: [FriendlyChange] {
+        sections.flatMap(\.changes)
+    }
 
     public var securityRelatedChanges: [FriendlyChange] {
         changes.filter { change in
@@ -156,29 +167,65 @@ public enum FriendlyReleaseDigestBuilder {
         categories: [Category],
         impact: ImpactLevel
     ) -> FriendlyReleaseDigest {
-        let highlights = meaningfulLines(from: body)
-        var changes: [FriendlyChange] = highlights.enumerated().map { index, line in
-            let kind = kind(for: line, categories: categories)
-            let area = areaTitle(for: line, categories: categories)
+        let sections = markdownSections(from: body)
+        var friendlySections: [FriendlyChangeSection] = sections.enumerated().compactMap { sectionIndex, section in
+            let changes = section.lines.enumerated().map { lineIndex, line in
+                change(
+                    version: version,
+                    sectionIndex: sectionIndex,
+                    lineIndex: lineIndex,
+                    line: line,
+                    categories: categories
+                )
+            }
 
-            return FriendlyChange(
-                id: "\(version)-\(index)-\(area)-\(kind.rawValue)",
-                areaTitle: area,
-                kind: kind,
-                kindTitle: kind.title,
-                plainDetail: plainDetail(for: line, kind: kind),
-                whyItMatters: whyItMatters(for: line, kind: kind),
-                howToUse: howToUse(for: line, kind: kind),
-                whereToCheck: whereToCheck(for: line, area: area),
-                evidence: line
+            guard !changes.isEmpty else {
+                return nil
+            }
+
+            return FriendlyChangeSection(
+                id: "\(version)-section-\(sectionIndex)-\(section.title)",
+                title: displayTitle(forSection: section.title),
+                rawTitle: section.title,
+                changes: mergeSimilar(changes, limit: 120)
             )
         }
 
-        if changes.isEmpty {
-            changes = fallbackChanges(version: version, title: title, categories: categories, impact: impact)
+        if friendlySections.isEmpty {
+            friendlySections = [
+                FriendlyChangeSection(
+                    id: "\(version)-fallback-section",
+                    title: "요약",
+                    rawTitle: "Summary",
+                    changes: fallbackChanges(version: version, title: title, categories: categories, impact: impact)
+                )
+            ]
         }
 
-        return FriendlyReleaseDigest(changes: mergeSimilar(changes))
+        return FriendlyReleaseDigest(sections: friendlySections)
+    }
+
+    private static func change(
+        version: String,
+        sectionIndex: Int,
+        lineIndex: Int,
+        line: String,
+        categories: [Category]
+    ) -> FriendlyChange {
+        let kind = kind(for: line, categories: categories)
+        let area = areaTitle(for: line, categories: categories)
+
+        return FriendlyChange(
+            id: "\(version)-\(sectionIndex)-\(lineIndex)-\(area)-\(kind.rawValue)",
+            areaTitle: area,
+            kind: kind,
+            kindTitle: kind.title,
+            plainDetail: plainDetail(for: line, kind: kind),
+            whyItMatters: whyItMatters(for: line, kind: kind),
+            howToUse: howToUse(for: line, kind: kind),
+            whereToCheck: whereToCheck(for: line, area: area),
+            evidence: line
+        )
     }
 
     private static func fallbackChanges(
@@ -204,7 +251,7 @@ public enum FriendlyReleaseDigestBuilder {
         ]
     }
 
-    private static func mergeSimilar(_ changes: [FriendlyChange]) -> [FriendlyChange] {
+    private static func mergeSimilar(_ changes: [FriendlyChange], limit: Int) -> [FriendlyChange] {
         var seen = Set<String>()
         var merged: [FriendlyChange] = []
 
@@ -217,7 +264,7 @@ public enum FriendlyReleaseDigestBuilder {
             merged.append(change)
         }
 
-        return Array(merged.prefix(30))
+        return Array(merged.prefix(limit))
     }
 
     private static func kind(for line: String, categories: [Category]) -> FriendlyChangeKind {
@@ -229,7 +276,7 @@ public enum FriendlyReleaseDigestBuilder {
         if containsAny(lower, ["permission", "auth", "oauth", "login", "token", "access"]) {
             return .permissionChange
         }
-        if containsAny(lower, ["sandbox", "seatbelt", "read-only", "network proxy"]) {
+        if containsAny(lower, ["sandbox", "seatbelt", "read-only", "network proxy", "managed network proxy"]) {
             return .sandboxChange
         }
         if containsAny(lower, ["fix", "fixed", "bug", "crash", "regression", "reconnect", "retry", "incorrect", "case-insensitive"]) {
@@ -238,7 +285,7 @@ public enum FriendlyReleaseDigestBuilder {
         if containsAny(lower, ["breaking", "removed", "deprecated", "migration", "no longer"]) {
             return .breakingChange
         }
-        if containsAny(lower, ["add", "added", "new", "support", "search", "preview", "introduce", "goal"]) {
+        if containsAny(lower, ["add", "added", "new", "support", "search", "preview", "introduce", "goal", "improved", "made", "let"]) {
             return .newFeature
         }
 
@@ -273,7 +320,7 @@ public enum FriendlyReleaseDigestBuilder {
         if containsAny(lower, ["goal", "/goal", "objective", "acceptance criteria"]) {
             return "Goal"
         }
-        if containsAny(lower, ["cli", "tui", "terminal", "command line", "npm", "profile"]) {
+        if containsAny(lower, ["cli", "tui", "terminal", "command line", "npm", "profile", "powershell", "curl", "cargo", "just test"]) {
             return "CLI"
         }
         if containsAny(lower, ["desktop", "mac app", "macos", "app-server", "app server", "local conversation", "conversation history", "result preview"]) {
@@ -284,6 +331,15 @@ public enum FriendlyReleaseDigestBuilder {
         }
         if containsAny(lower, ["github review", "pull request", "pr review", "code review"]) {
             return "GitHub 리뷰"
+        }
+        if containsAny(lower, ["mcp", "connector", "tool schema", "hook", "extension", "subagent", "read-only", "readonlyhint"]) {
+            return "확장/도구"
+        }
+        if containsAny(lower, ["packaging", "artifact", "dotslash", "release-build", "v8", "zsh"]) {
+            return "배포/패키징"
+        }
+        if containsAny(lower, ["trace", "analytics", "websocket", "compaction", "turnstarted"]) {
+            return "원격/분석"
         }
         if containsAny(lower, ["sandbox", "permission", "auth", "login"]) {
             return "보안/권한"
@@ -323,8 +379,56 @@ public enum FriendlyReleaseDigestBuilder {
         if lower.contains("case-insensitive") {
             return "검색할 때 대소문자 차이 때문에 결과가 빠지는 문제를 줄였습니다."
         }
+        if lower.contains("--profile") || lower.contains("profile") {
+            return "CLI, TUI, 샌드박스 권한 흐름에서 사용할 기본 프로필 선택 방식이 `--profile` 중심으로 정리되었습니다."
+        }
+        if lower.contains("mcp") && lower.contains("oauth") {
+            return "MCP 서버를 추가하거나 연결할 때 서버별 환경값과 OAuth 옵션을 더 명확하게 지정할 수 있게 했습니다."
+        }
+        if lower.contains("$ref") || lower.contains("$defs") || lower.contains("tool schema") {
+            return "커넥터 도구 스키마가 큰 경우에도 구조를 유지하고 압축해 도구 노출이 더 안정적으로 동작하게 했습니다."
+        }
+        if lower.contains("readonlyhint") || lower.contains("read-only") {
+            return "읽기 전용 MCP 도구는 서로 충돌 위험이 낮을 때 동시에 실행될 수 있게 했습니다."
+        }
+        if lower.contains("hook") || lower.contains("extension") || lower.contains("subagent") {
+            return "확장 도구와 후크가 대화 기록이나 하위 에이전트 정보를 더 많이 받아 상황에 맞게 동작할 수 있게 했습니다."
+        }
         if lower.contains("reconnect") {
             return "네트워크가 끊겼다가 다시 연결될 때 생기던 오류를 줄였습니다."
+        }
+        if lower.contains("remote compaction") || lower.contains("remote control") || lower.contains("websocket") {
+            return "원격 세션, 웹소켓 연결, 압축 스트림이 실패했을 때 재연결과 재시도가 더 안정적으로 동작하게 했습니다."
+        }
+        if lower.contains("windows") && lower.contains("tui") {
+            return "Windows 터미널에서 TUI 화면이 깨져 보일 수 있는 렌더링 문제를 수정했습니다."
+        }
+        if lower.contains("usage-limit") || lower.contains("spend-cap") || lower.contains("credit") {
+            return "크레딧이나 지출 한도에 걸렸을 때 어느 작업공간의 제한인지 더 구체적으로 보여줍니다."
+        }
+        if lower.contains("icon asset") {
+            return "플러그인 스킬이 공통 아이콘 에셋을 재사용할 수 있게 해 표시 누락 가능성을 줄였습니다."
+        }
+        if lower.contains("managed network proxy") || lower.contains("node env proxy") {
+            return "Node 기반 도구도 Codex가 관리하는 네트워크 프록시 설정을 따르도록 수정했습니다."
+        }
+        if lower.contains("curl") || lower.contains("powershell") {
+            return "README에 curl과 PowerShell 설치 경로가 추가되어 설치 방법을 찾기 쉬워졌습니다."
+        }
+        if lower.contains("just test") || lower.contains("cargo test") {
+            return "저장소 로컬 테스트는 `cargo test`를 직접 치기보다 `just test`를 우선 쓰도록 문서가 정리되었습니다."
+        }
+        if lower.contains("packaging") || lower.contains("artifact") || lower.contains("dotslash") || lower.contains("zsh") {
+            return "릴리스 패키징과 플랫폼별 배포 아티팩트 생성 흐름이 정리되었습니다."
+        }
+        if lower.contains("v8 artifact") {
+            return "Codex가 생성한 V8 아티팩트를 릴리스 빌드에 포함할 수 있게 했습니다."
+        }
+        if lower.contains("benchmark") || lower.contains("fixture") {
+            return "성능 측정과 스키마 정책 검증을 위한 테스트 자료가 추가되었습니다."
+        }
+        if lower.contains("trace") || lower.contains("analytics") {
+            return "웹소켓 요청, 턴 시작, 원격 압축 같은 내부 동작을 추적하고 분석하는 정보가 늘었습니다."
         }
         if lower.contains("crash") {
             return "앱이나 CLI가 비정상 종료되던 상황을 수정했습니다."
@@ -368,6 +472,18 @@ public enum FriendlyReleaseDigestBuilder {
         }
         if lower.contains("search across local conversation history") {
             return "예전에 Codex와 나눈 대화나 작업 근거를 다시 찾기 쉬워져, 업데이트 내용이나 이전 결정사항을 빠르게 확인할 수 있습니다."
+        }
+        if lower.contains("--profile") || lower.contains("profile") {
+            return "프로필 설정을 여러 곳에서 다르게 해석하면 권한이나 샌드박스 동작이 헷갈릴 수 있습니다. 이번 변경은 선택 기준을 하나로 맞추는 성격입니다."
+        }
+        if lower.contains("mcp") || lower.contains("connector") || lower.contains("tool schema") {
+            return "MCP나 커넥터를 쓰는 사용자는 도구 연결 실패, 스키마 오류, 인증 옵션 누락 같은 문제가 줄어들 수 있습니다."
+        }
+        if lower.contains("remote") || lower.contains("websocket") {
+            return "원격 환경을 쓰는 경우 연결 끊김이나 인증 복구 뒤 작업을 다시 이어가는 안정성이 중요합니다."
+        }
+        if lower.contains("usage-limit") || lower.contains("spend-cap") || lower.contains("credit") {
+            return "한도 초과 메시지가 구체적이면 어떤 워크스페이스에서 비용이나 사용량을 조정해야 하는지 빨리 알 수 있습니다."
         }
         if lower.contains("case-insensitive") {
             return "대문자/소문자를 정확히 기억하지 않아도 검색 결과가 더 잘 나옵니다."
@@ -421,10 +537,40 @@ public enum FriendlyReleaseDigestBuilder {
             ]
         }
 
+        if lower.contains("--profile") || lower.contains("profile") {
+            return [
+                "터미널에서 `codex --profile <이름>` 형태로 원하는 프로필을 지정합니다.",
+                "기존 프로필 설정 오류가 보이면 마이그레이션 안내 링크를 따라 새 형식으로 옮깁니다.",
+                "샌드박스나 권한 프롬프트가 예상한 프로필 기준으로 뜨는지 확인합니다."
+            ]
+        }
+
+        if lower.contains("mcp") || lower.contains("connector") || lower.contains("tool schema") {
+            return [
+                "사용 중인 MCP 서버나 커넥터를 한 번 다시 연결해봅니다.",
+                "OAuth가 필요한 서버는 인증 옵션이 정상적으로 유지되는지 확인합니다.",
+                "도구 호출 실패가 줄었는지 작은 작업으로 확인합니다."
+            ]
+        }
+
         if lower.contains("reconnect") {
             return [
                 "네트워크가 끊긴 뒤 Codex를 다시 연결해봅니다.",
                 "이전보다 세션 복구나 재시도 흐름이 안정적인지 확인합니다."
+            ]
+        }
+
+        if lower.contains("remote") || lower.contains("websocket") || lower.contains("compaction") {
+            return [
+                "원격 세션을 연결한 뒤 네트워크가 끊겼다가 복구되는 상황을 확인합니다.",
+                "이전보다 재시도 메시지나 세션 복구가 자연스러운지 봅니다."
+            ]
+        }
+
+        if lower.contains("windows") && lower.contains("tui") {
+            return [
+                "Windows 터미널에서 Codex TUI를 실행합니다.",
+                "화면 깨짐이나 글자 잔상이 줄었는지 확인합니다."
             ]
         }
 
@@ -478,25 +624,116 @@ public enum FriendlyReleaseDigestBuilder {
         if area == "보안/권한" {
             return "권한 요청 팝업, sandbox/approval 메시지, 설정"
         }
+        if area == "확장/도구" {
+            return "MCP 설정, 커넥터 도구 목록, 플러그인/후크 실행 결과"
+        }
+        if area == "배포/패키징" {
+            return "GitHub release asset, npm 패키지, macOS 아티팩트"
+        }
+        if area == "원격/분석" {
+            return "원격 세션 로그, 재연결 메시지, trace/analytics 로그"
+        }
         return "원문 릴리즈 노트와 OpenAI Codex changelog"
+    }
+
+    private struct MarkdownSection {
+        var title: String
+        var lines: [String]
+    }
+
+    private static func markdownSections(from body: String) -> [MarkdownSection] {
+        var sections: [MarkdownSection] = []
+        var currentTitle = "요약"
+        var currentLines: [String] = []
+
+        func flush() {
+            let lines = currentLines
+            if !lines.isEmpty {
+                sections.append(MarkdownSection(title: currentTitle, lines: lines))
+            }
+            currentLines = []
+        }
+
+        for rawLine in body.components(separatedBy: .newlines) {
+            let trimmed = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            if let heading = markdownHeadingTitle(from: trimmed) {
+                flush()
+                currentTitle = heading
+                continue
+            }
+
+            guard let line = meaningfulLine(from: trimmed, dropsSectionIntro: true) else {
+                continue
+            }
+            currentLines.append(line)
+        }
+
+        flush()
+        return sections
+    }
+
+    private static func markdownHeadingTitle(from line: String) -> String? {
+        guard line.hasPrefix("#") else {
+            return nil
+        }
+
+        let title = line
+            .drop(while: { $0 == "#" || $0 == " " })
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? nil : title
+    }
+
+    private static func displayTitle(forSection title: String) -> String {
+        let lower = title.lowercased()
+
+        if lower.contains("new feature") || lower.contains("feature") {
+            return "새로운 기능"
+        }
+        if lower.contains("bug") || lower.contains("fix") {
+            return "버그 수정"
+        }
+        if lower.contains("documentation") || lower.contains("docs") {
+            return "문서"
+        }
+        if lower.contains("chore") {
+            return "정리/릴리스 작업"
+        }
+        if lower.contains("changelog") || lower.contains("changed") {
+            return "전체 변경 로그"
+        }
+        if title == "요약" {
+            return title
+        }
+        return title
     }
 
     private static func meaningfulLines(from body: String) -> [String] {
         body
             .components(separatedBy: .newlines)
-            .map { line in
-                line
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "*-#` "))
+            .compactMap { line in
+                meaningfulLine(from: line, dropsSectionIntro: true)
             }
-            .filter { line in
-                !line.isEmpty &&
-                    !line.lowercased().hasPrefix("full changelog") &&
-                    !line.lowercased().hasPrefix("what") &&
-                    !line.lowercased().contains("compare/") &&
-                    line.count > 8
-            }
-            .map { String($0.prefix(240)) }
+    }
+
+    private static func meaningfulLine(from rawLine: String, dropsSectionIntro: Bool) -> String? {
+        let line = rawLine
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "*-#` "))
+
+        let lower = line.lowercased()
+        guard !line.isEmpty,
+              !lower.hasPrefix("full changelog"),
+              !lower.contains("compare/"),
+              line.count > 8 else {
+            return nil
+        }
+
+        if dropsSectionIntro, lower.hasPrefix("what") {
+            return nil
+        }
+
+        return line
     }
 
     private static func containsAny(_ haystack: String, _ needles: [String]) -> Bool {
