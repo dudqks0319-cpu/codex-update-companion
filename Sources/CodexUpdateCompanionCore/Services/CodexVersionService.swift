@@ -91,7 +91,7 @@ struct CodexVersionService {
         }
     }
 
-    private func runAndCapture(_ launchPath: String, arguments: [String]) -> String? {
+    private func runAndCapture(_ launchPath: String, arguments: [String], timeout: TimeInterval = 3) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: launchPath)
         process.arguments = arguments
@@ -105,8 +105,17 @@ struct CodexVersionService {
 
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
+            return nil
+        }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+
+        if process.isRunning {
+            process.terminate()
             return nil
         }
 

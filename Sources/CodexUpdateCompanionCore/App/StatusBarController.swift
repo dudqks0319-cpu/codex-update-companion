@@ -64,7 +64,10 @@ public final class StatusBarController: NSObject {
     }
 
     private func updateButton() {
-        statusItem.isVisible = true
+        statusItem.isVisible = StatusBarVisibilityPolicy.isVisible(
+            onlyShowWhenCodexRuns: store.onlyShowWhenCodexRuns,
+            isCodexRunning: store.isCodexRunning
+        )
 
         guard let button = statusItem.button else {
             return

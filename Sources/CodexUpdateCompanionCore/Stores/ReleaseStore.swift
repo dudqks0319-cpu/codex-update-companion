@@ -57,6 +57,7 @@ public final class ReleaseStore: ObservableObject {
 
     private let cacheStore: ReleaseCacheStore
     private let githubService: GitHubReleaseService
+    private let changelogService: OpenAIChangelogService
     private let processMonitor: CodexProcessMonitor
     private let notificationService: NotificationService
     private let loginItemService: LoginItemService
@@ -67,6 +68,7 @@ public final class ReleaseStore: ObservableObject {
         self.init(
             cacheStore: ReleaseCacheStore(),
             githubService: GitHubReleaseService(),
+            changelogService: OpenAIChangelogService(),
             processMonitor: CodexProcessMonitor(),
             notificationService: NotificationService(),
             loginItemService: LoginItemService(),
@@ -78,6 +80,7 @@ public final class ReleaseStore: ObservableObject {
     init(
         cacheStore: ReleaseCacheStore = ReleaseCacheStore(),
         githubService: GitHubReleaseService = GitHubReleaseService(),
+        changelogService: OpenAIChangelogService = OpenAIChangelogService(),
         processMonitor: CodexProcessMonitor = CodexProcessMonitor(),
         notificationService: NotificationService = NotificationService(),
         loginItemService: LoginItemService = LoginItemService(),
@@ -86,6 +89,7 @@ public final class ReleaseStore: ObservableObject {
     ) {
         self.cacheStore = cacheStore
         self.githubService = githubService
+        self.changelogService = changelogService
         self.processMonitor = processMonitor
         self.notificationService = notificationService
         self.loginItemService = loginItemService
@@ -93,7 +97,7 @@ public final class ReleaseStore: ObservableObject {
         self.defaults = defaults
 
         releases = cacheStore.load()
-        notificationsEnabled = defaults.object(forKey: DefaultsKey.notificationsEnabled) as? Bool ?? true
+        notificationsEnabled = defaults.object(forKey: DefaultsKey.notificationsEnabled) as? Bool ?? false
         onlyShowWhenCodexRuns = defaults.object(forKey: DefaultsKey.onlyShowWhenCodexRuns) as? Bool ?? false
         launchAtLoginEnabled = loginItemService.isEnabled
         enabledCategories = Self.loadEnabledCategories(from: defaults)
@@ -129,7 +133,12 @@ public final class ReleaseStore: ObservableObject {
         let hadExistingCache = !releases.isEmpty
 
         do {
-            let fetched = try await githubService.fetchLatestReleases()
+            async let githubFetch = githubService.fetchLatestReleases()
+            async let changelogFetch = changelogService.fetchLatestEntries()
+
+            let githubReleases = try await githubFetch
+            let changelogReleases = (try? await changelogFetch) ?? []
+            let fetched = githubReleases + changelogReleases
             let merged = merge(fetched: fetched, existing: releases)
             let newReleases = merged.filter { !knownIDs.contains($0.id) }
 
