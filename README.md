@@ -100,6 +100,18 @@ swift test
 - Application Support 아래 로컬 JSON 캐시 저장
 - 사용자가 켠 경우 macOS 알림
 
+## 배포
+
+이 저장소는 MIT 라이선스로 공개됩니다. 배포 파일은 GitHub Releases에서 notarized DMG로 제공합니다.
+
+현재 베타 릴리즈:
+
+- `v0.1.0-beta.1`
+- 배포 파일: `CodexUpdateCompanion.dmg`
+- SHA-256: `e4a1ae5a8683f9e978d1b5620f7a7f889fc75e9feb5895c3a17ebc3c22deab13`
+- Apple notarization: Accepted
+- Stapling: 완료
+
 ## 직접 배포 체크리스트
 
 초기 베타 릴리즈 노트 초안은 `docs/releases/v0.1.0-beta.1.md`에 있습니다.
@@ -125,3 +137,7 @@ codesign --force --deep --options runtime --sign "Developer ID Application: <Tea
 ## 고지
 
 Unofficial companion app. Not affiliated with OpenAI.
+
+## License
+
+MIT. See `LICENSE`.
